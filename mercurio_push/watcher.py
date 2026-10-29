@@ -35,6 +35,10 @@ MAX_PER_POLL = 4
 MARKS_SAVE_SECONDS = 30
 _SILENCE = {"[SILENT]", "SILENT", "NO_REPLY", "NO REPLY", "[静默]", "静默", "[沉默]", "沉默"}
 _LONG_LIVED_MODULES = ("tui_gateway.server", "gateway.run")
+# The user's own chats (Mercurio, the dashboard, the CLI): not Telegram and the like, which notify on their
+# own, nor cron runs or subagents.
+CHAT_SOURCES = ("tui", "cli", "desktop", "webui", "gui")
+CHATS_MARK = "*chats"
 
 
 def is_long_lived_process(argv: Optional[List[str]] = None, modules: Optional[Dict[str, object]] = None) -> bool:
@@ -153,13 +157,50 @@ def new_replies(home: Path, session_id: str, after_id: int) -> Tuple[int, List[T
     replies = []
     for msg_id, role, content, tool_calls, active, display_kind, ts, carried_over in rows:
         newest = max(newest, int(msg_id))
-        if carried_over or role != "assistant" or not active or (tool_calls and tool_calls.strip() not in ("", "[]", "null")):
-            continue
-        if display_kind and display_kind not in ("assistant", "message", "text"):
-            continue
-        text = plain_text(content)
-        if text and not is_silence(text):
+        text = _reply_text(role, content, tool_calls, active, display_kind, carried_over)
+        if text:
             replies.append((int(msg_id), float(ts or 0), text))
+    return newest, replies
+
+
+def _reply_text(role, content, tool_calls, active, display_kind, carried_over) -> Optional[str]:
+    """A final assistant reply's words, or None for anything else."""
+    if carried_over or role != "assistant" or not active or (tool_calls and tool_calls.strip() not in ("", "[]", "null")):
+        return None
+    if display_kind and display_kind not in ("assistant", "message", "text"):
+        return None
+    text = plain_text(content)
+    return text if text and not is_silence(text) else None
+
+
+def new_chat_replies(home: Path, after_id: int, skip: Iterable[str] = ()) -> Tuple[int, List[Tuple[int, float, str, str, str]]]:
+    """(newest message id in the profile, final replies after ``after_id`` in the user's own chats as
+    (id, timestamp, text, session id, title)). The Bot Chat goes out as ``bot_message``, so it's left out."""
+    uri = f"file:{(home / 'state.db').as_posix()}?mode=ro"
+    conn = sqlite3.connect(uri, uri=True, timeout=2.0)
+    try:
+        newest = int(conn.execute("SELECT MAX(id) FROM messages").fetchone()[0] or 0)
+        session_columns = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
+        if newest <= after_id or not {"source", "title"} <= session_columns:
+            return newest, []
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(messages)")}
+        carried = " + ".join(f"m.{c}" for c in ("_compressed_summary", "compacted") if c in columns) or "0"
+        marks = ",".join("?" * len(CHAT_SOURCES))
+        rows = conn.execute(
+            f"SELECT m.id, m.role, m.content, m.tool_calls, m.active, m.display_kind, m.timestamp, ({carried}), "
+            f"m.session_id, COALESCE(s.title, '') FROM messages m JOIN sessions s ON s.id = m.session_id "
+            f"WHERE m.id > ? AND m.role = 'assistant' AND s.source IN ({marks}) "
+            "AND COALESCE(s.title, '') NOT LIKE ? ORDER BY m.id LIMIT 200",
+            (after_id, *CHAT_SOURCES, BOT_CHAT_TITLE + "%"),
+        ).fetchall()
+    finally:
+        conn.close()
+    skipped = set(skip)
+    replies = []
+    for msg_id, role, content, tool_calls, active, display_kind, ts, carried_over, session, title in rows:
+        text = _reply_text(role, content, tool_calls, active, display_kind, carried_over)
+        if text and session not in skipped:
+            replies.append((int(msg_id), float(ts or 0), text, session, title))
     return newest, replies
 
 
@@ -280,6 +321,12 @@ class Watcher:
             except Exception:
                 log.debug("mercurio-push: can't read %s", profile, exc_info=True)
                 continue
+            try:
+                sent_chats, chats_changed = self._poll_chats(profile, home, tip, devices, client)
+                sent += sent_chats
+                changed = changed or chats_changed
+            except Exception:
+                log.debug("mercurio-push: can't read the chats of %s", profile, exc_info=True)
             if not tip:
                 continue
             key = f"{profile}:{tip}"
@@ -319,13 +366,37 @@ class Watcher:
         if changed:
             # Drop marks of chats that are no longer anyone's tip.
             live = {f"{p}:{t}" for p, t in self._tips.items()}
-            self._marks = {k: v for k, v in self._marks.items() if k in live}
+            self._marks = {k: v for k, v in self._marks.items() if k in live or k.endswith(":" + CHATS_MARK)}
             self._marks_dirty = True
         if self._marks_dirty and (sent or self.now() - self._marks_saved_at >= MARKS_SAVE_SECONDS):
             self.store.save_marks(self._marks)
             self._marks_dirty = False
             self._marks_saved_at = self.now()
         return sent
+
+    def _poll_chats(self, profile: str, home: Path, tip: Optional[str], devices, client) -> Tuple[int, bool]:
+        """Replies in the profile's other chats, as ``chat_reply``: (pushes sent, whether the mark moved)."""
+        if not (home / "state.db").is_file():
+            return 0, False
+        key = f"{profile}:{CHATS_MARK}"
+        if key not in self._marks:
+            # First sight starts from now: no backlog of old replies.
+            self._marks[key] = new_chat_replies(home, 1 << 62)[0]  # the newest id, nothing to read
+            return 0, True
+        newest, replies = new_chat_replies(home, self._marks[key], skip=(tip,) if tip else ())
+        changed = newest != self._marks[key]
+        self._marks[key] = newest
+        fresh = [r for r in replies if self.now() - r[1] <= STALE_SECONDS][-MAX_PER_POLL:]
+        if not fresh or not devices or not self.enabled(home):
+            return 0, changed
+        _, sig = self.store.identity()[1:]
+        sent = 0
+        for _msg_id, _ts, text, session, title in fresh:
+            payload = push.message("chat_reply", bot=profile, label=title[:64] or None, session=session, text=push.clip(text))
+            for device in devices:
+                if push.publish(device, payload, sig, client):
+                    sent += 1
+        return sent, changed
 
     def poll_cron(self, devices, client: Optional[httpx.Client] = None) -> int:
         """Finished cron runs, to each phone that follows the job (or every failure, when it asked)."""

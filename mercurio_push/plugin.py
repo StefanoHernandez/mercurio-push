@@ -15,7 +15,7 @@ from .watcher import Watcher, is_long_lived_process
 
 log = logging.getLogger(__name__)
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 # A ring's push: what it says fits ntfy's 4096-byte message limit once sealed (base64 grows it by a third).
 MAX_REASON_BYTES = 600

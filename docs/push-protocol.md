@@ -109,7 +109,7 @@ v1.
 
 ## Plaintext (`g2p` / `p2g`)
 
-Same message types as Herald push v1 (`bot_message`, `approval`, `phone_request`, `phone_call`, `ping`,
+Same message types as Herald push v1 (`bot_message`, `approval`, `phone_request`, `phone_call`, `ping`, `chat_reply`,
 `cron_run`, …). See Herald's document for field lists and watcher behaviour; Mercurio uses the same payloads
 and the same `p2g` reservation (reply topics not read by the plugin yet).
 

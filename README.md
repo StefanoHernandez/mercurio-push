@@ -27,7 +27,7 @@ hermes plugins install https://github.com/StefanoHernandez/mercurio-push
   taken as the URL's last path segment (see `docs/push-protocol.md`). Use `/mercurio-push update-endpoint` to
   change or clear the URL without re-registering.
 - **Watching.** One watcher, in the dashboard or the messaging gateway process, reads every profile's
-  `state.db` read-only and pushes each new final reply in a bot's Bot Chat.
+  `state.db` read-only and pushes each new final reply in a bot's Bot Chat and, since 1.1.0, in the user's own chats (Mercurio, the dashboard, the CLI).
 - **Crypto.** P-256 ECDH to an ephemeral key, HKDF-SHA256, AES-256-GCM bound to the topic, and ECDSA P-256
   over everything, verified before decrypting. The wire format is in Mercurio's
   [`docs/push-protocol.md`](docs/push-protocol.md).

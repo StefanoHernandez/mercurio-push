@@ -363,3 +363,41 @@ def test_a_ring_carries_the_call_and_fits_one_push(tmp_path):
     # Any other tool is only a nudge: the call is fetched over the socket.
     other = plugin.wake_message({"id": "e" * 32, "tool": "phone_location", "args": {"fresh": True}})
     assert other["type"] == "phone_request" and "args" not in other and "reason" not in other
+
+
+def test_watcher_pushes_replies_of_the_users_own_chats(tmp_path, monkeypatch):
+    now = 1_800_000_000.0
+    root = tmp_path / "hermes"
+    _make_db(root, [("c1", "assistant", "old news", None, 1, None, now - 60)])
+    conn = sqlite3.connect(root / "state.db")
+    conn.execute("CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT NOT NULL, title TEXT)")
+    conn.executemany("INSERT INTO sessions VALUES (?,?,?)", [
+        ("c1", "tui", "Saluto amichevole"), ("c2", "cli", None), ("bot", "tui", "Bot Chat"),
+        ("tg", "telegram", "From Telegram"), ("cr", "cron", "Nightly"),
+    ])
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(watcher, "bot_chat_tip", lambda home: "bot" if (home / "state.db").exists() else None)
+    sent = []
+    monkeypatch.setattr(push, "publish", lambda device, payload, sig, client=None: sent.append(payload) or True)
+    store = Store(tmp_path / "data")
+    store.upsert(Device.parse(phone()[0]))
+    w = watcher.Watcher(root, store, now=lambda: now)
+
+    assert w.poll() == 0  # first sight: no backlog
+    _add(root,
+         ("c1", "assistant", "", '[{"id":"t"}]', 1, None, now),   # tool call
+         ("c1", "assistant", "Buongiorno!", None, 1, None, now),
+         ("c2", "assistant", "From the CLI", None, 1, None, now),
+         ("bot", "assistant", "Bot says hi", None, 1, None, now),
+         ("tg", "assistant", "Telegram has it", None, 1, None, now),
+         ("cr", "assistant", "Cron output", None, 1, None, now))
+    assert w.poll() == 3
+    chats = [(p["session"], p.get("label"), p["text"]) for p in sent if p["type"] == "chat_reply"]
+    assert chats == [("c1", "Saluto amichevole", "Buongiorno!"), ("c2", None, "From the CLI")]
+    assert [p["text"] for p in sent if p["type"] == "bot_message"] == ["Bot says hi"]
+    assert w.poll() == 0  # nothing twice
+    w2 = watcher.Watcher(root, store, now=lambda: now)
+    w2._marks = store.marks()
+    _add(root, ("c1", "assistant", "after restart", None, 1, None, now))
+    assert w2.poll() == 1 and sent[-1]["text"] == "after restart"

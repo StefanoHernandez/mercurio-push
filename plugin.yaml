@@ -1,6 +1,6 @@
 name: mercurio-push
 label: Mercurio push
-version: 1.0.0
+version: 1.1.0
 manifest_version: 2
 requires_hermes: ">=0.21.5"
 description: >
