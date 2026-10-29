@@ -4,6 +4,7 @@ import sqlite3
 import stat
 import sys
 
+import httpx
 import pytest
 
 from mercurio_push import commands, crypto, push, watcher
@@ -25,6 +26,10 @@ def phone(**overrides):
     {"server": "http://ntfy.sh"}, {"server": "https://evil.example/path"}, {"server": "https://user@host"},
     {"push_topic": "mytopic"}, {"push_topic": "hp-" + "0" * 31}, {"device_id": "../../etc"},
     {"enc_pub": "AAAA"}, {"sig_pub": 5},
+    {"push_endpoint": "http://ntfy.sh/topic"},
+    {"push_endpoint": "https://user:pass@ntfy.sh/topic"},
+    {"push_endpoint": "https://ntfy.sh/"},
+    {"push_endpoint": "https://ntfy.sh/" + "a" * 512},
 ])
 def test_registration_fields_are_validated(bad):
     data, _ = phone(**bad)
@@ -256,6 +261,65 @@ def test_concurrent_registrations_from_separate_stores_all_land(tmp_path):
         t.join()
     assert len(Store(tmp_path).devices()) == 8
     assert len({Store(tmp_path).public_identity()["sig_pub"] for _ in range(3)}) == 1
+
+
+def test_registration_with_push_endpoint(tmp_path):
+    endpoint = "https://ntfy.example/upAbCdEfGh"
+    data, _ = phone(push_endpoint=endpoint)
+    device = Device.parse(data)
+    assert device.push_endpoint == endpoint
+    store = Store(tmp_path)
+    store.upsert(device)
+    loaded = store.get(data["device_id"])
+    assert loaded is not None and loaded.push_endpoint == endpoint
+
+
+def test_update_endpoint(tmp_path):
+    store = Store(tmp_path)
+    data, _ = phone()
+    handle = commands.make_handler(store, "t", lambda: True, trusted=lambda: True)
+    assert json.loads(handle("register " + json.dumps(data)))["ok"]
+    endpoint = "https://push.example/distributor/upTopic99"
+    upd = json.loads(handle('update-endpoint ' + json.dumps({"device_id": data["device_id"], "push_endpoint": endpoint})))
+    assert upd["ok"]
+    assert store.get(data["device_id"]).push_endpoint == endpoint
+    cleared = json.loads(handle('update-endpoint ' + json.dumps({"device_id": data["device_id"], "push_endpoint": None})))
+    assert cleared["ok"]
+    assert store.get(data["device_id"]).push_endpoint is None
+
+
+def test_update_endpoint_refuses_untrusted(tmp_path):
+    store = Store(tmp_path)
+    data, _ = phone()
+    store.upsert(Device.parse(data))
+    handle = commands.make_handler(store, "t", lambda: True, trusted=lambda: False)
+    answer = json.loads(handle('update-endpoint ' + json.dumps({"device_id": data["device_id"], "push_endpoint": "https://ntfy.sh/x"})))
+    assert answer["ok"] is False
+
+
+def test_publish_posts_to_push_endpoint(tmp_path, monkeypatch):
+    endpoint = "https://ntfy.example/upAbCdEfGh"
+    data, enc = phone(push_endpoint=endpoint)
+    device = Device.parse(data)
+    store = Store(tmp_path)
+    _, _, sig = store.identity()
+    captured = {}
+
+    class Response:
+        status_code = 200
+
+    def fake_post(self, url, **kwargs):
+        captured["url"] = url
+        captured["body"] = kwargs.get("content", b"").decode("utf-8")
+        return Response()
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+
+    assert push.publish(device, push.message("ping"), sig)
+    assert captured["url"] == endpoint
+    opened = crypto.open_envelope(crypto.Envelope.from_json(captured["body"]), "upAbCdEfGh", crypto.G2P, enc,
+                                  crypto.decode_public(store.public_identity()["sig_pub"]))
+    assert json.loads(opened)["type"] == "ping"
 
 
 def test_pushed_envelope_opens_on_the_phone(tmp_path):

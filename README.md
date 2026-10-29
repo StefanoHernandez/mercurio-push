@@ -19,14 +19,18 @@ hermes plugins install https://github.com/StefanoHernandez/mercurio-push
 ## How it works
 
 - **Registration.** The phone registers over the dashboard's authenticated connection with
-  `/mercurio-push register`. The command refuses to run on messaging platforms, so someone chatting with a bot on
+  `/mercurio-push register` (optional `push_endpoint` for UnifiedPush distributors). The command refuses to run on messaging platforms, so someone chatting with a bot on
   Telegram can't add their own phone. At registration the phone and the gateway swap public keys, and each pins
   the other's.
+- **UnifiedPush.** When the phone supplies `push_endpoint` (full `https://server/topic` from the distributor),
+  envelopes are POSTed to that URL instead of `{server}/{push_topic}`. Crypto still binds to the topic string
+  taken as the URL's last path segment (see `docs/push-protocol.md`). Use `/mercurio-push update-endpoint` to
+  change or clear the URL without re-registering.
 - **Watching.** One watcher, in the dashboard or the messaging gateway process, reads every profile's
   `state.db` read-only and pushes each new final reply in a bot's Bot Chat.
 - **Crypto.** P-256 ECDH to an ephemeral key, HKDF-SHA256, AES-256-GCM bound to the topic, and ECDSA P-256
   over everything, verified before decrypting. The wire format is in Mercurio's
-  [`docs/push-protocol.md`](https://github.com/StefanoHernandez/mercurio-push/blob/master/docs/push-protocol.md).
+  [`docs/push-protocol.md`](docs/push-protocol.md).
 - **Storage.** The gateway identity and the device list are in `<hermes root>/plugin-data/mercurio-push/`, with
   file mode 0600.
 
