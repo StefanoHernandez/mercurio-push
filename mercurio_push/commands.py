@@ -24,6 +24,7 @@ MAX_ARG = 8192
 # A phone tool's answer (a calendar, a contact list) is bigger than anything else sent here.
 MAX_ANSWER_ARG = 64000
 USAGE = ("usage: /mercurio-push info | register <json> | unregister <device_id> | test <device_id> | "
+         "update-endpoint <json> | "
          "phone tools <json> | phone pending <json> | phone answer <json> | phone here <json> | "
          "phone list <json> | phone order <json> | phone remove <json> | cron follow|following|inbox|read <json>")
 
@@ -169,6 +170,26 @@ def make_handler(store: Store, version: str, watching: Callable[[], bool],
                     return reply(ok=False, error=str(exc) if isinstance(exc, InvalidRegistration) else "not JSON")
                 log.info("mercurio-push: registered %s", device.name)
                 return reply(ok=True, version=version, gateway=store.public_identity(), watching=watching())
+            if op == "update-endpoint":
+                try:
+                    data = json.loads(rest)
+                except ValueError:
+                    return reply(ok=False, error="not JSON")
+                if not isinstance(data, dict):
+                    return reply(ok=False, error="not an object")
+                device_id = data.get("device_id")
+                if not isinstance(device_id, str):
+                    return reply(ok=False, error="bad device_id")
+                if "push_endpoint" not in data:
+                    return reply(ok=False, error="missing push_endpoint")
+                endpoint = data["push_endpoint"]
+                if endpoint is not None and not isinstance(endpoint, str):
+                    return reply(ok=False, error="bad push_endpoint")
+                try:
+                    store.update_endpoint(device_id, endpoint)
+                except InvalidRegistration as exc:
+                    return reply(ok=False, error=str(exc))
+                return reply(ok=True)
             if op == "unregister":
                 return reply(ok=store.remove(rest))
             if op == "test":

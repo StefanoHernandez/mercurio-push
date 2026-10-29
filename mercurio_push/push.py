@@ -7,6 +7,7 @@ import logging
 import time
 import uuid
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 
@@ -19,6 +20,26 @@ MAX_BODY = 4096
 MAX_TEXT = 1800
 MAX_TEXT_BYTES = 2200
 _TIMEOUT = httpx.Timeout(15.0, connect=10.0)
+
+
+def crypto_topic(device: Device) -> str:
+    """Topic string bound into AES-GCM AAD and the ECDSA signed message (see docs/push-protocol.md)."""
+    if device.push_endpoint:
+        path = urlparse(device.push_endpoint).path.rstrip("/")
+        return path.rsplit("/", 1)[-1]
+    return device.push_topic
+
+
+def publish_url(device: Device) -> str:
+    if device.push_endpoint:
+        return device.push_endpoint
+    return f"{device.server}/{device.push_topic}"
+
+
+def log_target(device: Device) -> str:
+    if device.push_endpoint:
+        return urlparse(device.push_endpoint).hostname or "?"
+    return device.server
 
 
 def message(kind: str, **fields) -> dict:
@@ -57,7 +78,7 @@ def envelope_for(device: Device, payload: dict, sig_key) -> str:
     short lines). The phone can read the rest over the socket."""
     while True:
         plaintext = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-        env = crypto.seal(plaintext, device.push_topic, crypto.G2P, crypto.decode_public(device.enc_pub), sig_key)
+        env = crypto.seal(plaintext, crypto_topic(device), crypto.G2P, crypto.decode_public(device.enc_pub), sig_key)
         body = env.to_json()
         if len(body.encode("utf-8")) <= MAX_BODY:
             return body
@@ -75,7 +96,8 @@ def publish(device: Device, payload: dict, sig_key, client: Optional[httpx.Clien
     except ValueError:
         log.warning("mercurio-push: a %s message is too large to send", payload.get("type"))
         return False
-    url = f"{device.server}/{device.push_topic}"
+    url = publish_url(device)
+    target = log_target(device)
     try:
         if client is None:
             with httpx.Client(timeout=_TIMEOUT, follow_redirects=False) as own:
@@ -83,9 +105,9 @@ def publish(device: Device, payload: dict, sig_key, client: Optional[httpx.Clien
         else:
             response = client.post(url, content=body.encode("utf-8"), headers={"Content-Type": "text/plain"})
     except httpx.HTTPError as exc:
-        log.warning("mercurio-push: couldn't reach %s: %s", device.server, type(exc).__name__)
+        log.warning("mercurio-push: couldn't reach %s: %s", target, type(exc).__name__)
         return False
     if response.status_code >= 300:
-        log.warning("mercurio-push: %s answered %s", device.server, response.status_code)
+        log.warning("mercurio-push: %s answered %s", target, response.status_code)
         return False
     return True

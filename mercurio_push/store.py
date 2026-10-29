@@ -19,6 +19,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from urllib.parse import urlparse
+
 from . import crypto
 
 TOPIC_RE = re.compile(r"^hp-[0-9a-f]{32}$")
@@ -26,11 +28,31 @@ DEVICE_ID_RE = re.compile(r"^[0-9a-fA-F-]{8,64}$")
 SERVER_RE = re.compile(r"^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?$")
 MAX_DEVICES = 20
 MAX_NAME = 64
+MAX_PUSH_ENDPOINT = 512
 _REPLACE_TRIES = 6
 
 
 class InvalidRegistration(ValueError):
     pass
+
+
+def validate_push_endpoint(raw: str) -> str:
+    """Full https URL from a UnifiedPush distributor (e.g. ntfy topic URL)."""
+    url = raw.strip()
+    if len(url) > MAX_PUSH_ENDPOINT:
+        raise InvalidRegistration("push_endpoint too long")
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise InvalidRegistration("push_endpoint must be https")
+    if parsed.username or parsed.password:
+        raise InvalidRegistration("push_endpoint must not include userinfo")
+    if not parsed.hostname:
+        raise InvalidRegistration("bad push_endpoint")
+    path = (parsed.path or "").rstrip("/")
+    segment = path.rsplit("/", 1)[-1] if path else ""
+    if not segment:
+        raise InvalidRegistration("push_endpoint needs a topic path")
+    return url
 
 
 @dataclass(frozen=True)
@@ -42,6 +64,7 @@ class Device:
     reply_topic: str
     enc_pub: str
     sig_pub: str
+    push_endpoint: Optional[str] = None
 
     @staticmethod
     def parse(data: object) -> "Device":
@@ -69,7 +92,12 @@ class Device:
         except crypto.Rejected as exc:
             raise InvalidRegistration(f"bad key: {exc}") from exc
         name = "".join(ch for ch in fields["name"] if ch.isprintable())[:MAX_NAME].strip() or "Phone"
-        return Device(**{**fields, "server": server, "name": name})
+        push_endpoint = None
+        if "push_endpoint" in data and data["push_endpoint"] is not None:
+            if not isinstance(data["push_endpoint"], str):
+                raise InvalidRegistration("bad push_endpoint")
+            push_endpoint = validate_push_endpoint(data["push_endpoint"])
+        return Device(**{**fields, "server": server, "name": name, "push_endpoint": push_endpoint})
 
 
 def _write_private(path: Path, data: object) -> None:
@@ -202,6 +230,25 @@ class Store:
                 return False
             _write_private(self.root / "devices.json", {"devices": [asdict(d) for d in kept]})
             return True
+
+    def update_endpoint(self, device_id: str, push_endpoint: Optional[str]) -> None:
+        """Set or clear the UnifiedPush distributor URL for a registered phone."""
+        device = self.get(device_id)
+        if device is None:
+            raise InvalidRegistration("not registered")
+        if push_endpoint is not None:
+            push_endpoint = validate_push_endpoint(push_endpoint)
+        updated = Device(
+            device_id=device.device_id,
+            name=device.name,
+            server=device.server,
+            push_topic=device.push_topic,
+            reply_topic=device.reply_topic,
+            enc_pub=device.enc_pub,
+            sig_pub=device.sig_pub,
+            push_endpoint=push_endpoint,
+        )
+        self.upsert(updated)
 
     def get(self, device_id: str) -> Optional[Device]:
         return next((d for d in self.devices() if d.device_id == device_id), None)
