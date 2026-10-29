@@ -24,7 +24,7 @@ from .store import Store
 
 log = logging.getLogger(__name__)
 
-PLUGIN_NAME = "herald-push"
+PLUGIN_NAME = "mercurio-push"
 BOT_CHAT_TITLE = "Bot Chat"
 POLL_SECONDS = 3.0
 # After a restart, replies older than this are old news: don't push them.
@@ -54,7 +54,7 @@ def is_long_lived_process(argv: Optional[List[str]] = None, modules: Optional[Di
 
 
 def profile_enabled(home: Path) -> bool:
-    """The bot's own "Send notifications" switch: ``plugins.entries.herald-push.settings.enabled`` in its
+    """The bot's own "Send notifications" switch: ``plugins.entries.mercurio-push.settings.enabled`` in its
     profile's config.yaml, where the Plugins hub writes it. Each bot's setting governs that bot's pushes."""
     try:
         import yaml
@@ -237,7 +237,7 @@ class Watcher:
     def start(self) -> None:
         if self._thread is not None:
             return
-        self._thread = threading.Thread(target=self._run, name="herald-push-watcher", daemon=True)
+        self._thread = threading.Thread(target=self._run, name="mercurio-push-watcher", daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
@@ -266,7 +266,7 @@ class Watcher:
                 try:
                     self.poll(client)
                 except Exception:  # never let one bad poll end the watcher
-                    log.exception("herald-push: poll failed")
+                    log.exception("mercurio-push: poll failed")
                 self._stop.wait(POLL_SECONDS)
 
     def poll(self, client: Optional[httpx.Client] = None) -> int:
@@ -278,7 +278,7 @@ class Watcher:
             try:
                 tip = bot_chat_tip(home)
             except Exception:
-                log.debug("herald-push: can't read %s", profile, exc_info=True)
+                log.debug("mercurio-push: can't read %s", profile, exc_info=True)
                 continue
             if not tip:
                 continue

@@ -1,4 +1,4 @@
-"""herald-push: registers the ``/herald-push`` command and the phone tools, and in the dashboard or
+"""mercurio-push: registers the ``/mercurio-push`` command and the phone tools, and in the dashboard or
 messaging gateway starts the watcher that pushes bot replies to the registered phones."""
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from .watcher import Watcher, is_long_lived_process
 
 log = logging.getLogger(__name__)
 
-VERSION = "0.5.1"
+VERSION = "1.0.0"
 
 # A ring's push: what it says fits ntfy's 4096-byte message limit once sealed (base64 grows it by a third).
 MAX_REASON_BYTES = 600
@@ -51,7 +51,7 @@ def _root() -> Path:
 def register(ctx) -> None:
     global _watcher
     root = _root()
-    store = Store(root / "plugin-data" / "herald-push")
+    store = Store(root / "plugin-data" / "mercurio-push")
 
     def watching() -> bool:
         return _watcher is not None
@@ -67,8 +67,8 @@ def register(ctx) -> None:
 
     phones = Phones(store, wake)
     register_tools(ctx, phones)
-    ctx.register_command("herald-push", make_handler(store, VERSION, watching, phones=phones, root=root),
-                         description="Herald push notifications and phone tools: phones registered with this gateway",
+    ctx.register_command("mercurio-push", make_handler(store, VERSION, watching, phones=phones, root=root),
+                         description="Mercurio push notifications and phone tools: phones registered with this gateway",
                          args_hint="info | register <json> | unregister <id> | test <id> | phone …")
 
     if not is_long_lived_process():
@@ -78,7 +78,7 @@ def register(ctx) -> None:
             # One watcher for every profile; each bot's own "Send notifications" setting is read as it polls.
             _watcher = Watcher(root, store)
             _watcher.start()
-            log.info("herald-push: watching Bot Chats and cron runs")
+            log.info("mercurio-push: watching Bot Chats and cron runs")
             started = _watcher
 
             def stop() -> None:

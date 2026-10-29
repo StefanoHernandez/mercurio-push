@@ -1,8 +1,11 @@
-"""Herald push cryptography, protocol v1 (see PROTOCOL.md).
+"""Mercurio push cryptography, protocol v1 (see docs/push-protocol.md).
 
 P-256 ECDH to an ephemeral key, HKDF-SHA256, AES-256-GCM bound to the ntfy topic, and an ECDSA P-256
-signature over everything, verified before anything is decrypted. Must stay byte-compatible with Herald's
+signature over everything, verified before anything is decrypted. Must stay byte-compatible with Mercurio's
 PushCrypto.kt.
+
+Wire-protocol domain strings ``herald-push/v1`` below are frozen: HKDF info and the signed-message prefix
+must stay byte-identical to the app build tested against Giton22/hermes-herald-push at c88f027.
 """
 
 from __future__ import annotations

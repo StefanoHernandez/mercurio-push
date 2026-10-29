@@ -1,13 +1,13 @@
-"""Phone tools: agent tools that run on a phone with Herald.
+"""Phone tools: agent tools that run on a phone with Mercurio.
 
 The tools are a fixed list, reviewed here. A tool is offered to the agent only while a phone says it has it
-switched on (``/herald-push phone tools``); every tool starts off on the phone. Hermes fixes a chat's tools
+switched on (``/mercurio-push phone tools``); every tool starts off on the phone. Hermes fixes a chat's tools
 when the chat starts, so a switch changes what new chats are offered; a chat that already has a tool the
 user since turned off gets a refusal when it calls it.
 
 A call is a request file in ``<data>/phone/``. The phone learns about it from the agent's tool event (when
 it watches that chat), from a push (when it registered for push), or when it connects, reads it with
-``/herald-push phone pending`` and answers with ``/herald-push phone answer``. The tool waits for the answer
+``/mercurio-push phone pending`` and answers with ``/mercurio-push phone answer``. The tool waits for the answer
 file, and after its timeout tells the agent the phone didn't answer. Files, not memory: the agent can run in
 another process (turn isolation, cron, the messaging gateway) than the dashboard the phone talks to.
 
@@ -33,9 +33,9 @@ from .store import DEVICE_ID_RE, Store, _write_private
 
 log = logging.getLogger(__name__)
 
-TOOLSET = "herald_phone"
+TOOLSET = "mercurio_phone"
 
-# A phone not heard from for this long no longer offers its tools: Herald was removed, or signed out.
+# A phone not heard from for this long no longer offers its tools: Mercurio was removed, or signed out.
 STALE_SECONDS = 14 * 24 * 3600
 # How often a waiting tool looks for the answer.
 POLL_SECONDS = 0.25
@@ -61,7 +61,7 @@ CONFIRM_TIMEOUT = 120
 # A call rings 45 seconds on the phone; the rest is for the push to get there and the answer to come back.
 CALL_TIMEOUT = 75
 
-# The agent rings the user's own phone. It never takes a number: the phone it rings is the user's own Herald.
+# The agent rings the user's own phone. It never takes a number: the phone it rings is the user's own Mercurio.
 CALL_TOOL = "phone_call_me"
 MAX_REASON = 300
 MAX_DETAILS = 2000
@@ -471,7 +471,7 @@ class Phones:
                 if self.interrupted():
                     return _error("Stopped before the phone answered.")
                 time.sleep(POLL_SECONDS)
-            return _error("The phone didn't answer in time. Herald may be closed, offline or not connected to "
+            return _error("The phone didn't answer in time. Mercurio may be closed, offline or not connected to "
                           "this gateway, or the user didn't respond.")
         finally:
             for kind in ("req", "res"):
@@ -481,7 +481,7 @@ class Phones:
         try:
             self.wake(push_id, request)
         except Exception:
-            log.warning("herald-push: couldn't wake the phone for a tool", exc_info=True)
+            log.warning("mercurio-push: couldn't wake the phone for a tool", exc_info=True)
 
     @staticmethod
     def _read(path: Path) -> Optional[dict]:
@@ -582,7 +582,7 @@ def _refresh_tool_list() -> None:
 
 def on_messaging_platform() -> bool:
     """Whether this turn came from a messaging platform (Telegram, Discord, ...), where others can talk to the
-    bot. Unknown counts as no: the dashboard, Herald, Desktop, cron and the CLI don't set a platform."""
+    bot. Unknown counts as no: the dashboard, Mercurio, Desktop, cron and the CLI don't set a platform."""
     try:
         from gateway.session_context import session_is_messaging_surface
     except ImportError:
@@ -610,7 +610,7 @@ class _Watch(threading.Thread):
     """Refreshes this process's tool list when another process records a phone's switches."""
 
     def __init__(self, path: Path):
-        super().__init__(name="herald-push-phone-watch", daemon=True)
+        super().__init__(name="mercurio-push-phone-watch", daemon=True)
         self.path = path
         self.stopped = threading.Event()
 
@@ -646,7 +646,7 @@ def register_tools(ctx, phones: Phones) -> None:
     for name, (schema, _timeout, emoji) in TOOLS.items():
         def handler(args, session_id: str = "", _name=name, **_kwargs):
             if on_messaging_platform():
-                return _error("Phone tools only work in chats from Herald, Desktop or the dashboard, not on a "
+                return _error("Phone tools only work in chats from Mercurio, Desktop or the dashboard, not on a "
                               "messaging platform.")
             if _name == CALL_TOOL:
                 trimmed = call_args(args)

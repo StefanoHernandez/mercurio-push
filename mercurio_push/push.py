@@ -73,7 +73,7 @@ def publish(device: Device, payload: dict, sig_key, client: Optional[httpx.Clien
     try:
         body = envelope_for(device, payload, sig_key)
     except ValueError:
-        log.warning("herald-push: a %s message is too large to send", payload.get("type"))
+        log.warning("mercurio-push: a %s message is too large to send", payload.get("type"))
         return False
     url = f"{device.server}/{device.push_topic}"
     try:
@@ -83,9 +83,9 @@ def publish(device: Device, payload: dict, sig_key, client: Optional[httpx.Clien
         else:
             response = client.post(url, content=body.encode("utf-8"), headers={"Content-Type": "text/plain"})
     except httpx.HTTPError as exc:
-        log.warning("herald-push: couldn't reach %s: %s", device.server, type(exc).__name__)
+        log.warning("mercurio-push: couldn't reach %s: %s", device.server, type(exc).__name__)
         return False
     if response.status_code >= 300:
-        log.warning("herald-push: %s answered %s", device.server, response.status_code)
+        log.warning("mercurio-push: %s answered %s", device.server, response.status_code)
         return False
     return True

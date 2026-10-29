@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from cryptography.hazmat.primitives import serialization  # noqa: E402
 
-from herald_push import crypto  # noqa: E402
+from mercurio_push import crypto  # noqa: E402
 
 phone_enc = crypto.generate_key()
 gateway_sig = crypto.generate_key()

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from cryptography.hazmat.primitives.serialization import load_der_private_key
 
-from herald_push import crypto
+from mercurio_push import crypto
 
 
 def test_round_trip_both_ways():

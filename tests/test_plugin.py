@@ -6,8 +6,8 @@ import sys
 
 import pytest
 
-from herald_push import commands, crypto, push, watcher
-from herald_push.store import Device, InvalidRegistration, Store
+from mercurio_push import commands, crypto, push, watcher
+from mercurio_push.store import Device, InvalidRegistration, Store
 
 
 def phone(**overrides):
@@ -110,7 +110,7 @@ def test_each_bots_own_switch_is_honoured(tmp_path, monkeypatch):
     _make_db(root, [])
     side = root / "profiles" / "side"
     _make_db(side, [])
-    (side / "config.yaml").write_text("plugins:\n  entries:\n    herald-push:\n      settings:\n        enabled: false\n", encoding="utf-8")
+    (side / "config.yaml").write_text("plugins:\n  entries:\n    mercurio-push:\n      settings:\n        enabled: false\n", encoding="utf-8")
     assert watcher.profile_enabled(side) is False
     assert watcher.profile_enabled(root) is True
     monkeypatch.setattr(watcher, "bot_chat_tip", lambda home: "s1" if (home / "state.db").exists() else None)
@@ -272,7 +272,7 @@ def test_pushed_envelope_opens_on_the_phone(tmp_path):
 
 
 def test_a_ring_carries_the_call_and_fits_one_push(tmp_path):
-    from herald_push import plugin
+    from mercurio_push import plugin
     store = Store(tmp_path)
     data, enc = phone()
     device = Device.parse(data)

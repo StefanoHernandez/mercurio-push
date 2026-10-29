@@ -5,9 +5,9 @@ import time
 
 import pytest
 
-from herald_push import commands, phone
-from herald_push.phone import Phones
-from herald_push.store import Store
+from mercurio_push import commands, phone
+from mercurio_push.phone import Phones
+from mercurio_push.store import Store
 
 PHONE = "0b6f2c1e-1111-4222-8333-944445555666"
 OTHER = "99999999-aaaa-bbbb-cccc-dddddddddddd"

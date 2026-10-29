@@ -6,8 +6,8 @@ from datetime import datetime
 
 import pytest
 
-from herald_push import commands, crypto, cron, push, watcher
-from herald_push.store import Device, Store
+from mercurio_push import commands, crypto, cron, push, watcher
+from mercurio_push.store import Device, Store
 
 
 def phone(device_id="0b6f2c1e-1111-4222-8333-944445555666"):
@@ -165,7 +165,7 @@ def test_runs_are_found_in_every_profile_and_odd_names_are_ignored(tmp_path):
 
 def test_the_watcher_pushes_a_followed_run_that_opens_on_the_phone(tmp_path, monkeypatch):
     root = tmp_path / "root"
-    store = Store(root / "plugin-data" / "herald-push")
+    store = Store(root / "plugin-data" / "mercurio-push")
     data, enc = phone()
     other, _ = phone("1b6f2c1e-1111-4222-8333-944445555666")
     store.upsert(Device.parse(data))
@@ -235,7 +235,7 @@ def test_read_gives_one_run_in_full_and_refuses_odd_paths(tmp_path):
 
 def test_inbox_and_read_commands(tmp_path):
     root = tmp_path / "root"
-    store = Store(root / "plugin-data" / "herald-push")
+    store = Store(root / "plugin-data" / "mercurio-push")
     data, _ = phone()
     store.upsert(Device.parse(data))
     write_run(root, "brief", "2026-10-12_08-00-00", agent_run(response="Tuesday"))
@@ -358,7 +358,7 @@ def test_after_a_restart_a_new_jobs_fresh_run_is_found_and_its_old_history_is_no
 
 def test_a_push_too_large_once_sealed_is_cut_to_fit_and_the_pass_goes_on(tmp_path, monkeypatch):
     root = tmp_path / "root"
-    store = Store(root / "plugin-data" / "herald-push")
+    store = Store(root / "plugin-data" / "mercurio-push")
     data, enc = phone()
     store.upsert(Device.parse(data))
     cron.Follows(store).set(data["device_id"], cron.Follow({}, default="notify"))

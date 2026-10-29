@@ -1,5 +1,5 @@
-"""``/herald-push``: how Herald registers a phone, over the dashboard's authenticated socket
-(``command.dispatch``). Answers are JSON for Herald to read.
+"""``/mercurio-push``: how Mercurio registers a phone, over the dashboard's authenticated socket
+(``command.dispatch``). Answers are JSON for Mercurio to read.
 
 Slash commands can also be typed on a messaging platform (Telegram, Discord, ...); there they're refused,
 or anyone allowed to chat with a bot could register their own phone and receive every bot's messages.
@@ -23,13 +23,13 @@ log = logging.getLogger(__name__)
 MAX_ARG = 8192
 # A phone tool's answer (a calendar, a contact list) is bigger than anything else sent here.
 MAX_ANSWER_ARG = 64000
-USAGE = ("usage: /herald-push info | register <json> | unregister <device_id> | test <device_id> | "
+USAGE = ("usage: /mercurio-push info | register <json> | unregister <device_id> | test <device_id> | "
          "phone tools <json> | phone pending <json> | phone answer <json> | phone here <json> | "
          "phone list <json> | phone order <json> | phone remove <json> | cron follow|following|inbox|read <json>")
 
 
 def trusted_surface() -> bool:
-    """Only the dashboard socket (Herald, Desktop) may manage phones; fail closed when unsure."""
+    """Only the dashboard socket (Mercurio, Desktop) may manage phones; fail closed when unsure."""
     if "tui_gateway.server" not in sys.modules and "tui_gateway" not in sys.modules:
         return False
     try:
@@ -148,7 +148,7 @@ def make_handler(store: Store, version: str, watching: Callable[[], bool],
         # Exceptions would be swallowed into a generic "unknown command": always answer.
         try:
             if not trusted():
-                return reply(ok=False, error="Herald push can only be managed from the Herald app or the dashboard.")
+                return reply(ok=False, error="Mercurio push can only be managed from the Mercurio app or the dashboard.")
             raw = (raw or "").strip()
             if len(raw) > (MAX_ANSWER_ARG if raw.startswith("phone answer ") else MAX_ARG):
                 return reply(ok=False, error="too long")
@@ -167,7 +167,7 @@ def make_handler(store: Store, version: str, watching: Callable[[], bool],
                     store.upsert(device)
                 except ValueError as exc:  # InvalidRegistration and JSON errors
                     return reply(ok=False, error=str(exc) if isinstance(exc, InvalidRegistration) else "not JSON")
-                log.info("herald-push: registered %s", device.name)
+                log.info("mercurio-push: registered %s", device.name)
                 return reply(ok=True, version=version, gateway=store.public_identity(), watching=watching())
             if op == "unregister":
                 return reply(ok=store.remove(rest))
@@ -179,7 +179,7 @@ def make_handler(store: Store, version: str, watching: Callable[[], bool],
                 return reply(ok=push.publish(device, push.message("ping"), sig))
             return reply(ok=False, error=USAGE)
         except Exception as exc:
-            log.exception("herald-push: command failed")
+            log.exception("mercurio-push: command failed")
             return reply(ok=False, error=type(exc).__name__)
 
     return handle

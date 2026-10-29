@@ -1,10 +1,10 @@
-"""Cron runs for Herald's Inbox: which jobs each phone follows, and the finished runs to tell it about.
+"""Cron runs for Mercurio's Inbox: which jobs each phone follows, and the finished runs to tell it about.
 
 Hermes writes every finished run of a job to ``<home>/cron/output/<job_id>/<YYYY-MM-DD_HH-MM-SS>.md``, whatever
 the job delivers to (Telegram, local, a Bot Chat). The watcher reads those files, never the jobs' own delivery,
 so following a job here changes nothing about where else its output goes.
 
-A phone says which jobs it follows with ``/herald-push cron follow <json>``: per job ``notify`` (a notification)
+A phone says which jobs it follows with ``/mercurio-push cron follow <json>``: per job ``notify`` (a notification)
 or ``quiet`` (into the Inbox only), plus ``failures`` for a notification when any job's run fails. Runs that
 stayed silent (``[SILENT]``, a script with no output) are never sent.
 """
